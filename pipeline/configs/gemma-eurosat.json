@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "name": "gemma-eurosat-development",
+  "manifest_path": "manifests/eurosat.jsonl",
+  "labels": ["Annual Crop", "Forest", "Herbaceous Vegetation", "Highway", "Industrial", "Pasture", "Permanent Crop", "Residential", "River", "Sea Lake"],
+  "split": "development",
+  "seed": 42,
+  "limit": 20,
+  "model": {
+    "model_id": "google/gemma-3-4b-it",
+    "revision": "main",
+    "device": "cuda",
+    "dtype": "bfloat16",
+    "quantization": "4bit",
+    "local_files_only": true
+  }
+}

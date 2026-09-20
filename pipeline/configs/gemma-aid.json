@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "name": "gemma-aid-development",
+  "manifest_path": "manifests/aid.jsonl",
+  "labels": ["Agricultural", "Airport", "Beach", "Bridge", "Commercial District", "Desert", "Forest", "Highway Interchange", "Industrial", "Mountain", "Parking", "Port", "Railway Station", "Residential", "River", "Storage Tanks", "Venue", "Water Reservoir"],
+  "split": "development",
+  "seed": 42,
+  "limit": 36,
+  "model": {
+    "backend": "transformers",
+    "model_id": "google/gemma-3-4b-it",
+    "revision": "main",
+    "device": "cuda",
+    "dtype": "bfloat16",
+    "quantization": "4bit",
+    "local_files_only": true,
+    "max_input_tokens": 20000,
+    "max_new_tokens": 1000,
+    "do_sample": false,
+    "temperature": 0.2
+  },
+  "detection": {"prompt_path": "prompts/detection.txt", "max_attempts": 3},
+  "dialogue": {
+    "enabled": true,
+    "prompt_path": "prompts/dialogue.txt",
+    "group_size": 6,
+    "questions": ["Which images mention a water feature? List their image IDs and labels."]
+  }
+}

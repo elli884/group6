@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "name": "synthetic-plumbing-only",
+  "manifest_path": "manifests/eurosat.jsonl",
+  "labels": ["Annual Crop", "Forest", "Herbaceous Vegetation", "Highway", "Industrial", "Pasture", "Permanent Crop", "Residential", "River", "Sea Lake"],
+  "split": "development",
+  "seed": 42,
+  "limit": 2,
+  "model": {"backend": "fake", "device": "cpu", "dtype": "float32"},
+  "dialogue": {
+    "enabled": true,
+    "questions": ["List the image IDs and their labels."],
+    "group_size": 2
+  }
+}
