@@ -1,0 +1,216 @@
+{
+  "taxonomy": "aid18",
+  "seed": 42,
+  "manifest_path": "manifests/aid.jsonl",
+  "total": 7990,
+  "labels": [
+    "Agricultural",
+    "Airport",
+    "Beach",
+    "Bridge",
+    "Commercial District",
+    "Desert",
+    "Forest",
+    "Industrial",
+    "Mountain",
+    "Parking",
+    "Port",
+    "Railway Station",
+    "Residential",
+    "River",
+    "Storage Tanks",
+    "Venue",
+    "Water Reservoir"
+  ],
+  "declared_labels": [
+    "Agricultural",
+    "Airport",
+    "Beach",
+    "Bridge",
+    "Commercial District",
+    "Desert",
+    "Forest",
+    "Highway Interchange",
+    "Industrial",
+    "Mountain",
+    "Parking",
+    "Port",
+    "Railway Station",
+    "Residential",
+    "River",
+    "Storage Tanks",
+    "Venue",
+    "Water Reservoir"
+  ],
+  "missing_labels": [
+    "Highway Interchange"
+  ],
+  "mapped_class_counts": {
+    "Agricultural": 650,
+    "Airport": 360,
+    "Beach": 400,
+    "Bridge": 780,
+    "Commercial District": 350,
+    "Desert": 610,
+    "Forest": 600,
+    "Industrial": 390,
+    "Mountain": 340,
+    "Parking": 390,
+    "Port": 380,
+    "Railway Station": 260,
+    "Residential": 1000,
+    "River": 410,
+    "Storage Tanks": 360,
+    "Venue": 290,
+    "Water Reservoir": 420
+  },
+  "original_class_counts": {
+    "Airport": 360,
+    "BareLand": 310,
+    "Beach": 400,
+    "Bridge": 360,
+    "Commercial": 350,
+    "DenseResidential": 410,
+    "Desert": 300,
+    "Farmland": 370,
+    "Forest": 250,
+    "Industrial": 390,
+    "Meadow": 280,
+    "MediumResidential": 290,
+    "Mountain": 340,
+    "Park": 350,
+    "Parking": 390,
+    "Pond": 420,
+    "Port": 380,
+    "RailwayStation": 260,
+    "River": 410,
+    "SparseResidential": 300,
+    "Stadium": 290,
+    "StorageTanks": 360,
+    "Viaduct": 420
+  },
+  "excluded_class_counts": {
+    "BaseballField": 220,
+    "Center": 260,
+    "Church": 240,
+    "Playground": 370,
+    "Resort": 290,
+    "School": 300,
+    "Square": 330
+  },
+  "split_counts": {
+    "heldout": 1598,
+    "train": 0,
+    "validation": 0,
+    "development": 6392
+  },
+  "class_split_counts": {
+    "Agricultural": {
+      "heldout": 130,
+      "train": 0,
+      "validation": 0,
+      "development": 520
+    },
+    "Airport": {
+      "heldout": 72,
+      "train": 0,
+      "validation": 0,
+      "development": 288
+    },
+    "Beach": {
+      "heldout": 80,
+      "train": 0,
+      "validation": 0,
+      "development": 320
+    },
+    "Bridge": {
+      "heldout": 156,
+      "train": 0,
+      "validation": 0,
+      "development": 624
+    },
+    "Commercial District": {
+      "heldout": 70,
+      "train": 0,
+      "validation": 0,
+      "development": 280
+    },
+    "Desert": {
+      "heldout": 122,
+      "train": 0,
+      "validation": 0,
+      "development": 488
+    },
+    "Forest": {
+      "heldout": 120,
+      "train": 0,
+      "validation": 0,
+      "development": 480
+    },
+    "Industrial": {
+      "heldout": 78,
+      "train": 0,
+      "validation": 0,
+      "development": 312
+    },
+    "Mountain": {
+      "heldout": 68,
+      "train": 0,
+      "validation": 0,
+      "development": 272
+    },
+    "Parking": {
+      "heldout": 78,
+      "train": 0,
+      "validation": 0,
+      "development": 312
+    },
+    "Port": {
+      "heldout": 76,
+      "train": 0,
+      "validation": 0,
+      "development": 304
+    },
+    "Railway Station": {
+      "heldout": 52,
+      "train": 0,
+      "validation": 0,
+      "development": 208
+    },
+    "Residential": {
+      "heldout": 200,
+      "train": 0,
+      "validation": 0,
+      "development": 800
+    },
+    "River": {
+      "heldout": 82,
+      "train": 0,
+      "validation": 0,
+      "development": 328
+    },
+    "Storage Tanks": {
+      "heldout": 72,
+      "train": 0,
+      "validation": 0,
+      "development": 288
+    },
+    "Venue": {
+      "heldout": 58,
+      "train": 0,
+      "validation": 0,
+      "development": 232
+    },
+    "Water Reservoir": {
+      "heldout": 84,
+      "train": 0,
+      "validation": 0,
+      "development": 336
+    }
+  },
+  "ambiguities": [
+    "Canonical AID has no Highway Interchange folder; no source class is fabricated. The stated merges and exclusions yield 17 mapped classes, not 18.",
+    "The paper calls the excluded baseball class BaseballDiamond; canonical AID uses BaseballField.",
+    "Farmland -> Agricultural, Pond -> Water Reservoir, and Commercial -> Commercial District are semantic correspondences to Table III, not explicit folder mappings in the paper."
+  ]
+}
