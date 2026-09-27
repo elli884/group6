@@ -111,7 +111,9 @@ class TransformersBackend:
             observed_commits[name] = observed
 
         quantization = {"format": "none", "gguf": False}
-        model_options = {"torch_dtype": self._dtype, "config": model_config,
+        # Switched from 'torch_dtype' to 'dtype' due to error when running quantized models
+        # Switch back if model fails and returns all pad tokens.
+        model_options = {"dtype": self._dtype, "config": model_config,
                          "use_safetensors": True}
         if config.quantization != "none":
             quant_options = (
