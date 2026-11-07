@@ -9,7 +9,7 @@ from .artifacts import write_json
 from .config import load_config, project_path
 from .data import prepare_manifest
 from .evaluation import compare_runs
-from .runner import run_experiment, validate_experiment
+from .runner import run_experiment, run_one_image_mock, validate_experiment
 
 
 def main() -> int:
@@ -25,10 +25,24 @@ def main() -> int:
     prepare.add_argument("--heldout-fraction", type=float, default=0.2)
     prepare.add_argument("--train-fraction", type=float, default=0.0)
     prepare.add_argument("--validation-fraction", type=float, default=0.0)
-    for name in ("validate", "run"):
-        command = commands.add_parser(name)
-        command.add_argument("--config", required=True)
-        command.add_argument("--allow-heldout", action="store_true")
+    validate = commands.add_parser("validate")
+    validate.add_argument("--config", required=True)
+    validate.add_argument("--allow-heldout", action="store_true")
+    run = commands.add_parser("run")
+    run.add_argument("--config", required=True)
+    run.add_argument("--allow-heldout", action="store_true")
+    run.add_argument(
+        "--mock-mission-log", nargs="?", const="Forest", default=None, metavar="LABEL",
+        help="Ignore each identified class and put LABEL in the mission log the "
+             "dialogue prompt receives. Bare flag uses Forest.",
+    )
+    mock = commands.add_parser(
+        "mock-mission-log",
+        help="Load one image, ignore its class, and ask dialogue from a hardcoded label",
+    )
+    mock.add_argument("--config", required=True)
+    mock.add_argument("--image", required=True, type=Path, help="Image file to load")
+    mock.add_argument("--label", default="Forest", help="Hardcoded mission-log label")
     compare = commands.add_parser("compare", help="Compare two completed runs on identical images")
     compare.add_argument("--clean", required=True, help="Project-relative run directory")
     compare.add_argument("--other", required=True, help="Project-relative run directory")
@@ -56,8 +70,17 @@ def main() -> int:
                 selected, _, _ = validate_experiment(config, root, args.allow_heldout)
                 print(json.dumps({"valid": True, "selected": len(selected), "split": config.split,
                                   "model_loaded": False}, indent=2))
+            elif args.command == "run":
+                run_dir = run_experiment(
+                    config, root, args.allow_heldout, mock_mission_log=args.mock_mission_log,
+                )
+                if args.mock_mission_log is not None:
+                    print(f"mock mission log label: {args.mock_mission_log}")
+                print(run_dir.relative_to(root))
             else:
-                print(run_experiment(config, root, args.allow_heldout).relative_to(root))
+                run_dir, report = run_one_image_mock(config, root, args.image, args.label)
+                print(report)
+                print(f"run: {run_dir.relative_to(root)}")
     except (ValueError, OSError, RuntimeError, ImportError) as error:
         print(f"{type(error).__name__}: {error}", file=sys.stderr)
         return 1

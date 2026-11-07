@@ -179,6 +179,7 @@ def test_dialogue_uses_only_context_records_and_exact_grouped_questions(item):
         assert suffix == "Forest, River\nQUESTION=" + questions[index % 2]
         assert request.image is None
         assert "PRIVATE_" not in request.prompt
+        assert "log_audit" not in record
         assert record["image_ids"] == [d.image_id for d in group]
         assert record["prompt"] == request.prompt
         assert record["seed"] == request.seed

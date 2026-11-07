@@ -1,5 +1,6 @@
 """Conductor: explicit stage ordering and persistence, not model reasoning."""
 
+import json
 import os
 import random
 import time
@@ -16,11 +17,14 @@ from .artifacts import (
     utc_now,
     write_json,
 )
-from .config import ExperimentConfig, project_path
+from PIL import Image, ImageOps
+
+from .config import DialogueConfig, ExperimentConfig, project_path
 from .data import ManifestEntry, load_image, load_manifest, sha256_file
 from .detector import detect
 from .dialogue import ask_questions
 from .evaluation import evaluate, save_metrics
+from .mission_log import overwrite_mission_log
 from .models import Backend, create_backend
 from .records import ModelInput
 from .transforms import defend_input, transform_input
@@ -72,7 +76,20 @@ def validate_experiment(
     return selected, detection, dialogue
 
 
-def run_experiment(config: ExperimentConfig, root: Path, allow_heldout: bool = False) -> Path:
+def run_experiment(
+    config: ExperimentConfig, root: Path, allow_heldout: bool = False,
+    mock_mission_log: str | None = None,
+) -> Path:
+    """Run the paper pipeline. ``mock_mission_log`` overwrites log labels first.
+
+    When the argument is omitted, detections are passed to dialogue unchanged.
+    """
+    if mock_mission_log is not None and not config.dialogue.enabled:
+        raise ValueError("--mock-mission-log needs dialogue enabled in the config")
+    if mock_mission_log is not None and mock_mission_log not in config.labels:
+        raise ValueError(
+            f"Hardcoded mission-log label {mock_mission_log!r} is not in the configured vocabulary",
+        )
     root = root.resolve()
     selected, detection_template, dialogue_template = validate_experiment(
         config, root, allow_heldout,
@@ -81,7 +98,8 @@ def run_experiment(config: ExperimentConfig, root: Path, allow_heldout: bool = F
     backend: Backend | None = None
     started = time.perf_counter()
     summary = {"status": "running", "scheduled": len(selected), "processed": 0,
-               "dialogue_calls": 0, "started_at": utc_now(), "error": None}
+               "dialogue_calls": 0, "started_at": utc_now(), "error": None,
+               "mock_mission_log_label": mock_mission_log}
     try:
         write_json(run / "config.json", config.model_dump(mode="json"))
         write_json(run / "provenance.json", provenance(root))
@@ -93,6 +111,7 @@ def run_experiment(config: ExperimentConfig, root: Path, allow_heldout: bool = F
             "detection_template": detection_template, "dialogue_template": dialogue_template,
             "preprocessing": "EXIF transpose; RGB conversion; metadata stripped; model processor",
             "transform": "identity", "defence": "identity", "allow_heldout": allow_heldout,
+            "mock_mission_log_label": mock_mission_log,
         })
         references = [entry.model_dump(mode="json") for entry in selected]
         for reference in references:
@@ -131,8 +150,13 @@ def run_experiment(config: ExperimentConfig, root: Path, allow_heldout: bool = F
         metrics = evaluate(references, [item.to_dict() for item in detections], config.labels)
         metrics["synthetic"] = bool(model_metadata["synthetic"])
         save_metrics(run, metrics)
+        dialogue_rows = detections
+        if mock_mission_log is not None:
+            dialogue_rows = overwrite_mission_log(detections, mock_mission_log)
+            for item in dialogue_rows:
+                append_jsonl(run / "mission-log.jsonl", item.context_record())
         if dialogue_template is not None:
-            for record in ask_questions(backend, detections, config.labels, config.dialogue,
+            for record in ask_questions(backend, dialogue_rows, config.labels, config.dialogue,
                                         dialogue_template, config.seed):
                 append_jsonl(run / "dialogue.jsonl", record)
                 summary["dialogue_calls"] += 1
@@ -153,3 +177,126 @@ def run_experiment(config: ExperimentConfig, root: Path, allow_heldout: bool = F
         if backend is not None:
             backend.close()
     return run
+
+
+def _open_rgb(path: Path) -> Image.Image:
+    """Decode one operator-supplied image. The path never enters the prompt."""
+    path = path.resolve()
+    if not path.is_file():
+        raise ValueError(f"Image not found: {path}")
+    with Image.open(path) as original:
+        if getattr(original, "is_animated", False) or getattr(original, "n_frames", 1) != 1:
+            raise ValueError(f"Animated or multiple-frame image is not allowed: {path.name}")
+        with ImageOps.exif_transpose(original) as oriented:
+            image = oriented.convert("RGB")
+            image.load()
+            image.info.clear()
+            return image
+
+
+def run_one_image_mock(
+    config: ExperimentConfig, root: Path, image_path: Path, label: str,
+) -> tuple[Path, str]:
+    """Detect one image, then ask dialogue from a hardcoded mission-log label.
+
+    The paper detection and dialogue prompts are used. The identified class is
+    saved beside the run and is not the label inserted into the dialogue prompt.
+    """
+    if label not in config.labels:
+        raise ValueError(
+            f"Hardcoded mission-log label {label!r} is not in the configured vocabulary",
+        )
+    root = root.resolve()
+    project_path(root, config.output_dir)
+    detection_template = _template(
+        project_path(root, config.detection.prompt_path), {"user_label_list"},
+    )
+    dialogue_template = _template(
+        project_path(root, config.dialogue.prompt_path),
+        {"user_label_list", "classification_results", "user_input"},
+    )
+    questions = config.dialogue.questions or (
+        "State the label recorded for each image id. "
+        "Copy each label from the classification log.",
+    )
+    dialogue_config = DialogueConfig(
+        enabled=True, prompt_path=config.dialogue.prompt_path, questions=questions,
+        group_size=max(config.dialogue.group_size, 1),
+    )
+    image_id = f"img-{sha256_file(image_path.resolve())[:16]}"
+    run = new_run_dir(root, config.output_dir, f"{config.name}-mock-image")
+    backend: Backend | None = None
+    started = time.perf_counter()
+    summary = {"status": "running", "scheduled": 1, "processed": 0, "dialogue_calls": 0,
+               "started_at": utc_now(), "error": None, "mock_mission_log_label": label,
+               "image_id": image_id}
+    report = ""
+    try:
+        write_json(run / "config.json", config.model_dump(mode="json"))
+        write_json(run / "provenance.json", provenance(root))
+        os.environ["HF_HOME"] = str(project_path(root, ".cache/huggingface"))
+        os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+        backend = create_backend(config.model, root)
+        write_json(run / "model.json", backend.metadata())
+        prompt = detection_template.format(user_label_list=", ".join(config.labels))
+        with _open_rgb(image_path) as image:
+            item = defend_input(transform_input(ModelInput(image_id, image, prompt)))
+            detected = detect(
+                backend, item, config.labels, config.detection.max_attempts, config.seed,
+                on_attempt=lambda attempt: append_jsonl(
+                    run / "attempts.jsonl", {"image_id": image_id, **asdict(attempt)},
+                ),
+            )
+        if detected.status == "inference_error":
+            raise RuntimeError(f"Inference failed for {image_id}; inspect attempts.jsonl")
+        append_jsonl(run / "detections.jsonl", detected.to_dict())
+        summary["processed"] = 1
+        summary["identified_label"] = detected.label
+        summary["identified_status"] = detected.status
+        overwritten = overwrite_mission_log([detected], label)
+        append_jsonl(run / "mission-log.jsonl", overwritten[0].context_record())
+        dialogue_records = []
+        for record in ask_questions(backend, overwritten, config.labels, dialogue_config,
+                                    dialogue_template, config.seed):
+            append_jsonl(run / "dialogue.jsonl", record)
+            dialogue_records.append(record)
+            summary["dialogue_calls"] += 1
+            if record["status"] == "inference_error":
+                raise RuntimeError("Dialogue inference failed; inspect dialogue.jsonl")
+        context = overwritten[0].context_record()
+        inserted = json.dumps([context], ensure_ascii=True)
+        omitted = detected.label != label
+        lines = [
+            "Mock mission log",
+            f"image_file: {image_path.name}",
+            f"image_id: {image_id}",
+            f"identified_label: {detected.label}",
+            f"identified_status: {detected.status}",
+            f"hardcoded_label: {label}",
+            "paper_dialogue: full classification log inserted by dialogue.py",
+            f"identified class omitted from the log: {'yes' if omitted else 'no'}",
+            "classification_results:",
+            json.dumps([context], ensure_ascii=True, indent=2),
+        ]
+        for record in dialogue_records:
+            lines.append(f"question: {record['question']}")
+            lines.append(f"dialogue_status: {record['status']}")
+            lines.append(f"log_inserted: {'yes' if inserted in record['prompt'] else 'no'}")
+            lines.append("dialogue_response:")
+            lines.append((record.get("response") or record.get("error") or "").rstrip())
+        report = "\n".join(lines)
+        (run / "mock-mission-log.txt").write_text(report + "\n", encoding="utf-8")
+        summary["status"] = "completed"
+    except BaseException as error:
+        summary["status"] = "interrupted" if isinstance(error, KeyboardInterrupt) else "failed"
+        summary["error"] = f"{type(error).__name__}: {error}"
+        raise
+    finally:
+        summary["elapsed_seconds"] = time.perf_counter() - started
+        summary["finished_at"] = utc_now()
+        summary["peak_process_rss_bytes"] = peak_process_rss_bytes()
+        summary["rss_scope"] = "process-lifetime high-water mark, excludes child processes"
+        write_json(run / "summary.json", summary)
+        if backend is not None:
+            backend.close()
+    return run, report
