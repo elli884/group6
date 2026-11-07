@@ -132,6 +132,21 @@ accuracy as VLM performance. To evaluate the held-out set later, make a separate
 config with `split: "heldout"` and pass `--allow-heldout`. The runner does not
 evaluate training/validation splits. It never silently resumes or overwrites a run.
 
+## One image and one mission log
+
+From `pipeline/`, this loads one image, selects one catalog log, and runs Gemma 3 through Transformers.
+
+```sh
+uv run --locked --extra inference --extra quantization navi run --config configs/gemma-aid.json --mission-log wheat_not_airport --image path/to/photo.jpg
+```
+
+Example:
+Replace `wheat_not_airport` with the catalog id to test.
+
+```sh
+uv run --locked --extra inference --extra quantization navi run --config configs/gemma-aid.json --mission-log wheat_not_airport --image path/to/photo.jpg
+```
+
 ## Architecture
 
 ```text

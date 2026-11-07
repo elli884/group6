@@ -9,7 +9,8 @@ from .artifacts import write_json
 from .config import load_config, project_path
 from .data import prepare_manifest
 from .evaluation import compare_runs
-from .runner import run_experiment, run_one_image_mock, validate_experiment
+from .mission_logs import CASES
+from .runner import run_experiment, run_one_image_mock, run_selected_mission_log, validate_experiment
 
 
 def main() -> int:
@@ -35,6 +36,14 @@ def main() -> int:
         "--mock-mission-log", nargs="?", const="Forest", default=None, metavar="LABEL",
         help="Ignore each identified class and put LABEL in the mission log the "
              "dialogue prompt receives. Bare flag uses Forest.",
+    )
+    run.add_argument(
+        "--mission-log", choices=[case.case_id for case in CASES], metavar="CASE",
+        help="Classify --image with the config model, then ask dialogue from this catalog log.",
+    )
+    run.add_argument(
+        "--image", type=Path,
+        help="With --mission-log, the image fed to the config model.",
     )
     mock = commands.add_parser(
         "mock-mission-log",
@@ -71,12 +80,25 @@ def main() -> int:
                 print(json.dumps({"valid": True, "selected": len(selected), "split": config.split,
                                   "model_loaded": False}, indent=2))
             elif args.command == "run":
-                run_dir = run_experiment(
-                    config, root, args.allow_heldout, mock_mission_log=args.mock_mission_log,
-                )
-                if args.mock_mission_log is not None:
-                    print(f"mock mission log label: {args.mock_mission_log}")
-                print(run_dir.relative_to(root))
+                if args.mission_log and args.mock_mission_log:
+                    raise ValueError("Choose either --mission-log or --mock-mission-log")
+                if args.mission_log and args.image is None:
+                    raise ValueError("--mission-log requires --image")
+                if args.image is not None and not args.mission_log:
+                    raise ValueError("--image on run is only valid with --mission-log")
+                if args.mission_log:
+                    run_dir, report = run_selected_mission_log(
+                        config, root, args.mission_log, args.image,
+                    )
+                    print(report)
+                    print(f"run: {run_dir.relative_to(root)}")
+                else:
+                    run_dir = run_experiment(
+                        config, root, args.allow_heldout, mock_mission_log=args.mock_mission_log,
+                    )
+                    if args.mock_mission_log is not None:
+                        print(f"mock mission log label: {args.mock_mission_log}")
+                    print(run_dir.relative_to(root))
             else:
                 run_dir, report = run_one_image_mock(config, root, args.image, args.label)
                 print(report)
