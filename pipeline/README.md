@@ -134,7 +134,7 @@ evaluate training/validation splits. It never silently resumes or overwrites a r
 
 ## One image and one mission log
 
-From `pipeline/`, this loads one image, selects one catalog log, and runs Gemma 3 through Transformers.
+From `pipeline/`, this loads one image, swaps in the catalog log, and prints the class Gemma 3 states from that log.
 
 ```sh
 uv run --locked --extra inference --extra quantization navi run --config configs/gemma-aid.json --mission-log wheat_not_airport --image path/to/photo.jpg

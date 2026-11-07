@@ -10,7 +10,7 @@ from .config import load_config, project_path
 from .data import prepare_manifest
 from .evaluation import compare_runs
 from .mission_logs import CASES
-from .runner import run_experiment, run_one_image_mock, run_selected_mission_log, validate_experiment
+from .runner import run_experiment, run_selected_mission_log, validate_experiment
 
 
 def main() -> int:
@@ -33,25 +33,13 @@ def main() -> int:
     run.add_argument("--config", required=True)
     run.add_argument("--allow-heldout", action="store_true")
     run.add_argument(
-        "--mock-mission-log", nargs="?", const="Forest", default=None, metavar="LABEL",
-        help="Ignore each identified class and put LABEL in the mission log the "
-             "dialogue prompt receives. Bare flag uses Forest.",
-    )
-    run.add_argument(
         "--mission-log", choices=[case.case_id for case in CASES], metavar="CASE",
-        help="Classify --image with the config model, then ask dialogue from this catalog log.",
+        help="Classify --image, then replace that log with this catalog case.",
     )
     run.add_argument(
         "--image", type=Path,
-        help="With --mission-log, the image fed to the config model.",
+        help="With --mission-log, the image to classify before the log is replaced.",
     )
-    mock = commands.add_parser(
-        "mock-mission-log",
-        help="Load one image, ignore its class, and ask dialogue from a hardcoded label",
-    )
-    mock.add_argument("--config", required=True)
-    mock.add_argument("--image", required=True, type=Path, help="Image file to load")
-    mock.add_argument("--label", default="Forest", help="Hardcoded mission-log label")
     compare = commands.add_parser("compare", help="Compare two completed runs on identical images")
     compare.add_argument("--clean", required=True, help="Project-relative run directory")
     compare.add_argument("--other", required=True, help="Project-relative run directory")
@@ -80,8 +68,6 @@ def main() -> int:
                 print(json.dumps({"valid": True, "selected": len(selected), "split": config.split,
                                   "model_loaded": False}, indent=2))
             elif args.command == "run":
-                if args.mission_log and args.mock_mission_log:
-                    raise ValueError("Choose either --mission-log or --mock-mission-log")
                 if args.mission_log and args.image is None:
                     raise ValueError("--mission-log requires --image")
                 if args.image is not None and not args.mission_log:
@@ -93,16 +79,7 @@ def main() -> int:
                     print(report)
                     print(f"run: {run_dir.relative_to(root)}")
                 else:
-                    run_dir = run_experiment(
-                        config, root, args.allow_heldout, mock_mission_log=args.mock_mission_log,
-                    )
-                    if args.mock_mission_log is not None:
-                        print(f"mock mission log label: {args.mock_mission_log}")
-                    print(run_dir.relative_to(root))
-            else:
-                run_dir, report = run_one_image_mock(config, root, args.image, args.label)
-                print(report)
-                print(f"run: {run_dir.relative_to(root)}")
+                    print(run_experiment(config, root, args.allow_heldout).relative_to(root))
     except (ValueError, OSError, RuntimeError, ImportError) as error:
         print(f"{type(error).__name__}: {error}", file=sys.stderr)
         return 1

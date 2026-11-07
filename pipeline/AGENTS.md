@@ -21,9 +21,7 @@ All commands below assume the working directory is `pipeline/`. They describe fu
 - AID manifest: `uv run --locked navi prepare --dataset data/AID --taxonomy aid18 --output manifests/aid.jsonl`.
 - Validate without loading a model: `uv run --locked navi validate --config configs/gemma-aid.json`.
 - Inference: `uv run --locked --extra inference --extra quantization navi run --config configs/gemma-aid.json`.
-- Mock mission log on a normal run: `uv run --locked navi run --config configs/fake-eurosat.json --mock-mission-log Forest`.
-- One image: `uv run --locked navi mock-mission-log --config configs/gemma-aid.json --image path\to\photo.jpg --label Forest`.
-- One catalog log plus one image, using the config model (Gemma 3 for the AID config): `uv run --locked --extra inference --extra quantization navi run --config configs/gemma-aid.json --mission-log wheat_not_airport --image path\to\photo.jpg`.
+- One catalog log replacing the log of one image (Gemma 3 via the AID config): `uv run --locked --extra inference --extra quantization navi run --config configs/gemma-aid.json --mission-log wheat_not_airport --image path\to\photo.jpg`.
 - Comparison: `uv run --locked navi compare --clean runs/FIRST_RUN --other runs/SECOND_RUN`.
 - Project-local caches: `UV_CACHE_DIR=$PWD/.cache/uv` and `HF_HOME=$PWD/.cache/huggingface`. The backend explicitly uses `.cache/huggingface` as its model cache. Never commit credentials or cache files.
 - CLI `--project-dir` is a global option before the subcommand. All configured paths are relative to this directory, not a config's parent. `project_path` rejects absolute paths and escaping symlinks/traversal. Dataset functions reject all symlinks and `..` path components.
@@ -37,8 +35,7 @@ All commands below assume the working directory is `pipeline/`. They describe fu
 - `parsing.py`: pure text validation; no inference and no reference labels except the allowed vocabulary.
 - `detector.py`: infer, parse, retry, emit attempt callback, return final detection. Never reference-aware repair or model-driven control flow.
 - `log_guard.py`: external mission-log audit only. Provenance, gold-standard class profiles, and an XML report that separates historical records from the audit verdict. Not called by dialogue or the runner, and not substituted into the dialogue prompt.
-- `mission_log.py`: optional test injection. `overwrite_mission_log` replaces every identified class with one hardcoded label and a class-free description. It runs only when `navi run --mock-mission-log` or `navi mock-mission-log` asks for it.
-- `mission_logs.py`: the 20 confirmed six-row logs. `navi run --mission-log CASE --image FILE` classifies that file with the config model, then sends the chosen log through the paper dialogue prompt and attaches the same image. A run without that flag never reads this catalog.
+- `mission_logs.py`: the 20 confirmed six-row logs. `navi run --mission-log CASE --image FILE` classifies that file, then replaces the generated log with the chosen case before dialogue. A run without that flag never reads this catalog.
 - `dialogue.py`: fixed groups in manifest order, independent scripted questions, text-only context records. No access to reference data or original images. The full classification log is inserted as written. It does not know whether that log was overwritten.
 - `transforms.py`: separately named input-transform and input-defence stages, currently identity. They receive model-visible input only. This boundary is not a sandbox for arbitrary Python code.
 - `runner.py`: conductor, explicit ordering, image selection, stage invocation, persistence coordination, fatal-error handling. Do not embed prompting/model internals or scoring here.
@@ -72,7 +69,7 @@ Detection configuration names the template and total attempt count (1-10, defaul
 - Greedy decoding is the default reconstruction choice, not the paper's temperature sampling. Seeds do not make identical greedy retries useful; document this and use one attempt for low-cost smoke checks if desired. A stochastic experiment must explicitly enable sampling and hold that policy fixed across conditions.
 - Exhausted parse retries yield an invalid result and processing continues. Infrastructure/inference errors are recorded once and abort the run. There is no wall-time watchdog and no automatic device/precision fallback.
 - Dialogue uses the paper prompt from section 4.D.3, with opaque image IDs and manifest order in place of timestamps. `{classification_results}` is the full JSON log it is given. No profile filter, no XML wrapping, and no instruction that scene text is untrusted. No truncation, retrieval, history, or image reinspection. The backend rejects over-budget prompts. An external audit in `log_guard.py` may report on the same records without changing this prompt.
-- Default runs pass detector records straight through. `--mock-mission-log LABEL` (bare flag uses Forest) overwrites those labels before `ask_questions`. `navi mock-mission-log --config CONFIG --image FILE --label LABEL` does the same for one file. The identified class stays in `detections.jsonl`. The prompt sees the hardcoded label. `--mission-log CASE --image FILE` classifies that file with the config model and sends one catalog log. Dialogue.py still passes no image; this switch attaches the loaded image before the backend call.
+- Default runs pass detector records straight through. `--mission-log CASE --image FILE` classifies that file, saves that log, then replaces it with one catalog case before dialogue. The report checks whether the critical id is missing from the downlink answer and whether the class answer follows the injected label.
 
 ## Model Contract
 
