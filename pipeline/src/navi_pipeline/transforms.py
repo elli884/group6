@@ -135,5 +135,5 @@ def defend_input(item: ModelInput) -> ModelInput:
 # Following method allows run record to indicate what the active transformation elements are.
 def transform_description():
     if not _TEXT_ENABLED and _PATCH is None:
-        return "Original image"
+        return "identity"
     return {"Text injection": {"label": _TEXT_LABEL} if _TEXT_ENABLED else None, "Patch": asdict(_PATCH) if _PATCH is not None else None}

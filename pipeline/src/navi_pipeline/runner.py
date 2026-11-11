@@ -23,7 +23,7 @@ from .dialogue import ask_questions
 from .evaluation import evaluate, save_metrics
 from .models import Backend, create_backend
 from .records import ModelInput
-from .transforms import defend_input, transform_input
+from .transforms import defend_input, transform_input, transform_description
 
 
 def _template(path: Path, fields: set[str]) -> str:
@@ -92,7 +92,7 @@ def run_experiment(config: ExperimentConfig, root: Path, allow_heldout: bool = F
             "manifest_sha256": sha256_file(manifest_path),
             "detection_template": detection_template, "dialogue_template": dialogue_template,
             "preprocessing": "EXIF transpose; RGB conversion; metadata stripped; model processor",
-            "transform": "identity", "defence": "identity", "allow_heldout": allow_heldout,
+            "transform": transform_description(), "defence": "identity",
         })
         references = [entry.model_dump(mode="json") for entry in selected]
         for reference in references:

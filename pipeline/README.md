@@ -221,6 +221,14 @@ create human-reviewed feature/relationship annotations for descriptions. Do not
 claim a clean model output is ground truth or extrapolate this ground replica to
 actual spacecraft safety.
 
+## Running Implemented Attacks and Defences
+
+Visual prompt injection:
+For the patch attack the following command can be run.
+NAVI_ATTACK_PATCH='{"shape":"square","size":0.2,"x":0.5,"y":0.5,"color":"random"}' \
+  uv run python -m navi_pipeline.cli run --config configs/gemma-aid.json
+The shape can be a square, rectangle, circle or ellipse. The size is written as a fraction of the image width and the x and y positions refer to the center of the patch written as a fraction of image width and height respectively. The color can either be randomly selected or written in the form [r,g,b] with values 0-255.
+
 ## Development Checks
 
 These commands are documented for later; none were run during implementation.
