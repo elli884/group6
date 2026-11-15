@@ -13,6 +13,8 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 from .records import ModelInput
 
+_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" # Change font type
+
 # -------------------------------------------------------------------------------------------
 
 # Toggle and parameters for the typographic injection attack (7.1 / 7.10).
@@ -20,7 +22,6 @@ from .records import ModelInput
 # touching ExperimentConfig's strict schema — see note below on why.
 _TEXT_ENABLED = os.environ.get("NAVI_ATTACK_TEXT_INJECTION", "0") == "1"
 _TEXT_LABEL = os.environ.get("NAVI_ATTACK_TARGET_LABEL", "Beach")
-_FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" # Change font type
 
 
 def _inject_label_text(image: Image.Image, text: str) -> Image.Image:
@@ -43,6 +44,73 @@ def _inject_label_text(image: Image.Image, text: str) -> Image.Image:
     return img
 
 # ---------------------------------------------------------------------------------------------------------------
+# Extension of text injection attack inspired from stenographic attacks, adds low-amplitude visible overlay instead of obvious text to the image
+# Easy to look over at a glance
+# Cannot actually implement single nudge of pixel colour as images get resized within the pipeline so a slight difference will not be visible to the model.
+
+_STEGO_MODE = os.environ.get("NAVI_ATTACK_STEGO_MODE")  # "faint" | "lsb" | None
+_STEGO_TEXT = os.environ.get("NAVI_ATTACK_STEGO_TEXT", "Forest")
+_STEGO_ALPHA = float(os.environ.get("NAVI_ATTACK_STEGO_ALPHA", "0.08"))
+_STEGO_BIT = int(os.environ.get("NAVI_ATTACK_STEGO_BIT", "0"))
+
+if _STEGO_MODE not in (None, "faint", "lsb"):
+    raise ValueError('NAVI_ATTACK_STEGO_MODE must be "faint" or "lsb"')
+
+
+def _inject_faint_text(image: Image.Image, text: str, alpha: float) -> Image.Image:
+    """Visible-in-principle, hard-to-notice text: real glyphs, low opacity.
+        Alpha is the blend strength (0-1), 0.05-0.15 is "hard to notice at a glance".
+        Far below that, it starts to approach true LSB territory and is unlikely to
+        survive the model's resize at all.
+        """
+    img = image.convert("RGB")
+    overlay = Image.new("RGB", img.size, (0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+    font_size = max(18, img.width // 8)
+    try:
+        font = ImageFont.truetype(_FONT_PATH, font_size)
+    except OSError:
+        font = ImageFont.load_default()
+    draw.text((img.width * 0.05, img.height * 0.05), text, fill=(255, 0, 0), font=font)
+    text_mask = overlay.convert("L").point(lambda p: int(p > 0) * int(255 * alpha))
+    # Test return line, if image looks wrong replace it with Image.blend(img, overlay_with_text_only, alpha). 
+    # Although this will wash the whole image toward black.
+    return Image.composite(overlay, img, text_mask)
+
+
+def _inject_lsb_text(image: Image.Image, text: str, bit_plane: int) -> Image.Image:
+    """True bit-plane encoding: ASCII text packed into the chosen bit of the red
+        channel. Likely to be destroyed by resizing but use this to test in-built defense.
+        """
+    arr = np.array(image.convert("RGB"), dtype=np.uint8)
+    bits = "".join(f"{ord(c):08b}" for c in text) + "0" * 8
+    flat_r = arr[:, :, 0].flatten()
+    if len(bits) > flat_r.size:
+        raise ValueError("Message too long for this image's capacity")
+    mask = ~(1 << bit_plane) & 0xFF
+    for i, bit in enumerate(bits):
+        flat_r[i] = (flat_r[i] & mask) | (int(bit) << bit_plane)
+    arr[:, :, 0] = flat_r.reshape(arr[:, :, 0].shape)
+    return Image.fromarray(arr, mode="RGB")
+
+
+def _apply_stego(image: Image.Image) -> Image.Image:
+    if _STEGO_MODE == "faint":
+        return _inject_faint_text(image, _STEGO_TEXT, _STEGO_ALPHA)
+    return _inject_lsb_text(image, _STEGO_TEXT, _STEGO_BIT)
+
+# Can use function below to test whether the attack will survive the resize without having to run the full model.
+# Get target size from the model.json of a previous run (processor_config -> image_processor). Look for size/crop_size.
+def survives_resize(image: Image.Image, attacked: Image.Image, target_size: tuple[int, int]) -> float:
+    """Returns mean absolute pixel difference after both images go through the
+    same resize the model's processor will apply. If this is near zero, the
+    perturbation has already been destroyed before the model sees it."""
+    a = np.array(image.resize(target_size, Image.BICUBIC), dtype=np.float32)
+    b = np.array(attacked.resize(target_size, Image.BICUBIC), dtype=np.float32)
+    return float(np.abs(a - b).mean())
+
+
+# -------------------------------------------------------------------------------------------------------------------
 
 # Second type of visual injection attack. Creates an arbitrary shape of coloured pixels on top
 # of the image to disrupt the VLM. 
@@ -124,6 +192,8 @@ def transform_input(item: ModelInput) -> ModelInput:
         image = _inject_label_text(image, _TEXT_LABEL)
     if _PATCH is not None:
         image = _apply_patch(image, _PATCH, item.image_id)
+    if _STEGO_MODE is not None:
+        image = _apply_stego(image)
     if image is item.image:
         return item
     return ModelInput(item.image_id, image, item.prompt)
@@ -134,6 +204,13 @@ def defend_input(item: ModelInput) -> ModelInput:
 
 # Following method allows run record to indicate what the active transformation elements are.
 def transform_description():
-    if not _TEXT_ENABLED and _PATCH is None:
-        return "identity"
-    return {"Text injection": {"label": _TEXT_LABEL} if _TEXT_ENABLED else None, "Patch": asdict(_PATCH) if _PATCH is not None else None}
+    active = {}
+    if _TEXT_ENABLED:
+        active["text_injection"] = {"label": _TEXT_LABEL}
+    if _PATCH is not None:
+        active["random_patch"] = asdict(_PATCH)
+    if _STEGO_MODE is not None:
+        active["stego"] = {"mode": _STEGO_MODE, "text": _STEGO_TEXT,
+                           "alpha": _STEGO_ALPHA if _STEGO_MODE == "faint" else None,
+                           "bit_plane": _STEGO_BIT if _STEGO_MODE == "lsb" else None}
+    return active or "identity"
