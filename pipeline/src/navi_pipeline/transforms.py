@@ -99,16 +99,6 @@ def _apply_stego(image: Image.Image) -> Image.Image:
         return _inject_faint_text(image, _STEGO_TEXT, _STEGO_ALPHA)
     return _inject_lsb_text(image, _STEGO_TEXT, _STEGO_BIT)
 
-# Can use function below to test whether the attack will survive the resize without having to run the full model.
-# Get target size from the model.json of a previous run (processor_config -> image_processor). Look for size/crop_size.
-def survives_resize(image: Image.Image, attacked: Image.Image, target_size: tuple[int, int]) -> float:
-    """Returns mean absolute pixel difference after both images go through the
-    same resize the model's processor will apply. If this is near zero, the
-    perturbation has already been destroyed before the model sees it."""
-    a = np.array(image.resize(target_size, Image.BICUBIC), dtype=np.float32)
-    b = np.array(attacked.resize(target_size, Image.BICUBIC), dtype=np.float32)
-    return float(np.abs(a - b).mean())
-
 
 # -------------------------------------------------------------------------------------------------------------------
 
@@ -185,6 +175,28 @@ def _apply_patch(image: Image.Image, s: PatchSettings, image_id: str) -> Image.I
     return out
 
 # -----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+# Extension of patch attack based on efficient AP-PA algorithm. 
+# Not direct copy as implemented to an object detector using bounding-boxes unlike Gemma 3 which labels the whole image.
+# Keeps ideas of iterative gradient optimization, total variation loss.
+# requires white-box gradient access and true label to optimize towards, so needs to run an offline script this code will just load and paste from.
+# Only implement if time permitting, maybe in conjunction with mission-log poisoning.
+
+_TRAINED_PATCH_PATH = os.environ.get("NAVI_ATTACK_TRAINED_PATCH")
+_TRAINED_PATCH_X = float(os.environ.get("NAVI_ATTACK_TRAINED_PATCH_X", "0.5"))
+_TRAINED_PATCH_Y = float(os.environ.get("NAVI_ATTACK_TRAINED_PATCH_Y", "0.5"))
+_TRAINED_PATCH = Image.open(_TRAINED_PATCH_PATH).convert("RGB") if _TRAINED_PATCH_PATH else None
+
+
+def _apply_trained_patch(image: Image.Image) -> Image.Image:
+    img = image.copy()
+    pw, ph = _TRAINED_PATCH.size
+    x = min(max(round(_TRAINED_PATCH_X * img.width - pw / 2), 0), img.width - pw)
+    y = min(max(round(_TRAINED_PATCH_Y * img.height - ph / 2), 0), img.height - ph)
+    img.paste(_TRAINED_PATCH, (x, y))
+    return img
+
+
+# ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 def transform_input(item: ModelInput) -> ModelInput:
     image = item.image
@@ -194,6 +206,8 @@ def transform_input(item: ModelInput) -> ModelInput:
         image = _apply_patch(image, _PATCH, item.image_id)
     if _STEGO_MODE is not None:
         image = _apply_stego(image)
+    if _TRAINED_PATCH is not None:
+        image = _apply_trained_patch(image)
     if image is item.image:
         return item
     return ModelInput(item.image_id, image, item.prompt)
@@ -213,4 +227,7 @@ def transform_description():
         active["stego"] = {"mode": _STEGO_MODE, "text": _STEGO_TEXT,
                            "alpha": _STEGO_ALPHA if _STEGO_MODE == "faint" else None,
                            "bit_plane": _STEGO_BIT if _STEGO_MODE == "lsb" else None}
+    if _TRAINED_PATCH is not None:
+        active["trained_patch"] = {"path": _TRAINED_PATCH_PATH,
+                                   "x": _TRAINED_PATCH_X, "y": _TRAINED_PATCH_Y}
     return active or "identity"
