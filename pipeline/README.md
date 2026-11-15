@@ -229,6 +229,15 @@ NAVI_ATTACK_PATCH='{"shape":"square","size":0.2,"x":0.5,"y":0.5,"color":"random"
   uv run python -m navi_pipeline.cli run --config configs/gemma-aid.json
 The shape can be a square, rectangle, circle or ellipse. The size is written as a fraction of the image width and the x and y positions refer to the center of the patch written as a fraction of image width and height respectively. The color can either be randomly selected or written in the form [r,g,b] with values 0-255.
 
+The extended text attack can be run in two modes using the following commands:
+Faint/low-amplitude text (recommended variant of the two)
+NAVI_ATTACK_STEGO_MODE=faint NAVI_ATTACK_STEGO_TEXT=Forest NAVI_ATTACK_STEGO_ALPHA=0.08 \
+  uv run python -m navi_pipeline.cli run --config configs/gemma-aid.json
+
+True LSB (negative control — no effect expected due to image resizing when running the model)
+NAVI_ATTACK_STEGO_MODE=lsb NAVI_ATTACK_STEGO_TEXT=Forest \
+  uv run python -m navi_pipeline.cli run --config configs/gemma-aid.json
+
 ## Development Checks
 
 These commands are documented for later; none were run during implementation.
